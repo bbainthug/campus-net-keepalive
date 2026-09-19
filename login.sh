@@ -16,6 +16,8 @@ source "$CONFIG"
 : "${INTERVAL:=5}" "${FALLBACK_MAC:=}"
 : "${CHECK_URL:=http://captive.apple.com/hotspot-detect.html}"
 : "${LOG:=$HOME/Library/Logs/campus-net.log}"
+# 互踢保护：WINDOW 秒内重登超过 MAX_RELOGINS 次，视为与其他设备互踢，暂停 COOLDOWN 秒
+: "${MAX_RELOGINS:=3}" "${WINDOW:=600}" "${COOLDOWN:=900}"
 
 UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
 
@@ -73,14 +75,26 @@ if [[ "${1:-}" == "--once" ]]; then
   exit 0
 fi
 
-log "守护进程启动，检测间隔 ${INTERVAL}s"
+log "守护进程启动，检测间隔 ${INTERVAL}s，互踢保护 ${WINDOW}s 内 >${MAX_RELOGINS} 次则暂停 ${COOLDOWN}s"
 fails=0
+relogins=()   # 最近成功重登的时间戳
 while true; do
   if is_online; then
     fails=0
     sleep "$INTERVAL"
   elif do_login; then
     fails=0
+    now=$(date +%s)
+    relogins+=("$now")
+    # 只保留窗口内的记录
+    keep=(); for t in "${relogins[@]}"; do (( now - t < WINDOW )) && keep+=("$t"); done
+    relogins=("${keep[@]}")
+    if (( ${#relogins[@]} > MAX_RELOGINS )); then
+      log "警告：${WINDOW}s 内重登 ${#relogins[@]} 次，疑似账号超过设备上限在互踢，暂停 ${COOLDOWN}s 避免账号异常"
+      relogins=()
+      sleep "$COOLDOWN"
+      continue
+    fi
     sleep "$INTERVAL"
   else
     # 连续失败时指数退避（最长 60s），避免疯狂刷认证服务器
