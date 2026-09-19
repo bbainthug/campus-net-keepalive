@@ -51,6 +51,8 @@ cp config.example.sh config.sh
 ./install.sh
 ```
 
+脚本和配置会被复制到 `~/Library/Application Support/campus-net/` 运行（`~/Documents` 等目录受 macOS 隐私保护，后台进程读不了）。改了 `config.sh` 后重新执行 `./install.sh` 即可生效。
+
 ## 日志
 
 只在掉线重登 / 登录失败时写入：
